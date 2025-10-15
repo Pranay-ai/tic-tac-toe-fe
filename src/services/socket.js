@@ -1,7 +1,7 @@
 let socket;
 let openListeners = [];
 const backendWsUrl =
-  (typeof __APP_BACKEND_WS_URL__ !== "undefined" && __APP_BACKEND_WS_URL__) ||
+  import.meta?.env?.VITE_BACKEND_WS_URL ||
   "wss://tic-tac-toe-server-5jbq.onrender.com/ws";
 
 const flushOpenListeners = () => {
