@@ -1,7 +1,8 @@
 let socket;
 let onOpenCallbacks = [];
 const websocketUrl =
-  import.meta.env.VITE_WEBSOCKET_URL || "ws://localhost:8080/ws";
+  import.meta.env.VITE_WEBSOCKET_URL ||
+  "wss://tic-tac-toe-server-5jbq.onrender.com/ws";
 
 // This function will be called once the socket is open.
 const executeOnOpenCallbacks = () => {
