@@ -1,53 +1,45 @@
 let socket;
-let openListeners = [];
-const backendWsUrl =
-  import.meta?.env?.VITE_BACKEND_WS_URL ||
-  "wss://tic-tac-toe-server-5jbq.onrender.com/ws";
+let onOpenCallbacks = [];
+const websocketUrl =
+  import.meta.env.VITE_WEBSOCKET_URL || "ws://localhost:8080/ws";
 
-const flushOpenListeners = () => {
-  if (openListeners.length === 0) {
-    return;
+// This function will be called once the socket is open.
+const executeOnOpenCallbacks = () => {
+  if (onOpenCallbacks.length > 0) {
+    onOpenCallbacks.forEach((callback) => callback());
+    onOpenCallbacks = []; // Clear callbacks after execution
   }
-
-  const listenersToCall = openListeners;
-  openListeners = [];
-
-  listenersToCall.forEach((listener) => {
-    try {
-      listener();
-    } catch (error) {
-      console.error("Error running socket onOpen listener:", error);
-    }
-  });
 };
 
 export const connectSocket = (onOpen) => {
+  // If a valid callback is provided, add it to the list.
   if (typeof onOpen === "function") {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      onOpen();
-    } else {
-      openListeners.push(onOpen);
-    }
+    onOpenCallbacks.push(onOpen);
   }
 
-  if (socket) {
-    if (
-      socket.readyState === WebSocket.OPEN ||
-      socket.readyState === WebSocket.CONNECTING
-    ) {
-      return;
-    }
+  // If the socket is already open, immediately run the callbacks.
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    executeOnOpenCallbacks();
+    return;
   }
 
-  socket = new WebSocket(backendWsUrl);
+  // If the socket is already trying to connect, just wait.
+  if (socket && socket.readyState === WebSocket.CONNECTING) {
+    return;
+  }
+
+  // If there's no socket or it's closed, create a new one.
+  socket = new WebSocket(websocketUrl);
 
   socket.onopen = () => {
     console.log("WebSocket connection established successfully.");
-    flushOpenListeners();
+    // Run all pending onOpen callbacks.
+    executeOnOpenCallbacks();
   };
 
   socket.onclose = () => {
     console.log("WebSocket connection closed.");
+    socket = null; // Clear the socket on close
   };
 
   socket.onerror = (error) => {
@@ -60,15 +52,17 @@ export const sendMessage = (message) => {
     socket.send(JSON.stringify(message));
     return true;
   }
-
-  console.error("Socket is not connected.");
+  console.error("Socket is not connected or ready.");
   return false;
 };
 
 export const subscribeToMessages = (callback) => {
-  if (!socket) return;
-  socket.onmessage = (event) => {
-    const message = JSON.parse(event.data);
-    callback(message);
-  };
+  // The onmessage handler can be set at any time.
+  // We'll rely on the app's effect hook to set this up.
+  if (socket) {
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      callback(message);
+    };
+  }
 };

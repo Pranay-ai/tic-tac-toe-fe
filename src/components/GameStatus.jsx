@@ -9,7 +9,11 @@ const GameStatus = () => {
   }
 
   let message = "";
-  const isGameOver = gameState.status !== "playing";
+  const disconnectionStatuses = ["disconnected_x", "disconnected_o"];
+  const isGameOver = !["playing", ...disconnectionStatuses].includes(
+    gameState.status
+  );
+  const isDisconnected = disconnectionStatuses.includes(gameState.status);
   const isPlayerX = playerId && gameState.playerX === playerId;
   const isPlayerO = playerId && gameState.playerO === playerId;
   const mySymbol = isPlayerX ? "X" : isPlayerO ? "O" : null;
@@ -76,6 +80,13 @@ const GameStatus = () => {
   const opponentName = opponentCandidates.find(Boolean);
   const opponentLabel = opponentName || "your opponent";
 
+  const nameForSymbol = (symbol) => {
+    if (!symbol) {
+      return undefined;
+    }
+    return extractName(gameState[`player${symbol}Name`]);
+  };
+
   switch (gameState.status) {
     case "win_x":
       message = mySymbol
@@ -94,6 +105,24 @@ const GameStatus = () => {
     case "draw":
       message = "It's a Draw! 🤝";
       break;
+    case "disconnected_x": {
+      const disconnectedName = nameForSymbol("X");
+      message = mySymbol === "X"
+        ? "Reconnecting..."
+        : disconnectedName
+        ? `Opponent (${disconnectedName}) disconnected. Waiting...`
+        : "Opponent disconnected. Waiting...";
+      break;
+    }
+    case "disconnected_o": {
+      const disconnectedName = nameForSymbol("O");
+      message = mySymbol === "O"
+        ? "Reconnecting..."
+        : disconnectedName
+        ? `Opponent (${disconnectedName}) disconnected. Waiting...`
+        : "Opponent disconnected. Waiting...";
+      break;
+    }
     default:
       // Turn status is now handled by the border
       break;
@@ -105,7 +134,7 @@ const GameStatus = () => {
 
   return (
     <div className="game-status">
-      {(mySymbol || opponentName) && (
+      {(mySymbol || opponentName) && !isDisconnected && (
         <p className="game-status__matchup">
           Playing with <span className="game-status__opponent">{opponentLabel}</span>
           {opponentSymbol ? ` (${opponentSymbol})` : ""}

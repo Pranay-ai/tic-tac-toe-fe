@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import "./App.css";
 import GameBoard from "./components/GameBoard";
 import GameStatus from "./components/GameStatus";
@@ -21,31 +21,54 @@ function App() {
   const [playerName, setPlayerNameState] = useState(getPlayerName());
   const [isSearching, setIsSearching] = useState(false);
   const [leaderboard, setLeaderboard] = useState(null);
-  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(true);
-  const previousStatusRef = useRef(null);
-
-  const handleViewLeaderboard = useCallback(() => {
-    setIsLeaderboardLoading(true);
-
-    const didSend = sendMessage({ type: "get_leaderboard" });
-
-    if (!didSend) {
-      setIsLeaderboardLoading(false);
-    }
-  }, []);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
+  const [appStatus, setAppStatus] = useState("loading"); // "loading", "reconnecting", "ready"
 
   useEffect(() => {
-    connectSocket(handleViewLeaderboard);
-    setPlayerId(getPlayerId());
+    const playerId = getPlayerId();
+    setPlayerId(playerId);
+    // CHANGED: from sessionStorage to localStorage
+    const activeGameId = localStorage.getItem("activeGameId");
+
+    if (activeGameId) {
+      setAppStatus("reconnecting");
+    } else {
+      setAppStatus("ready");
+    }
+
+    const onSocketOpen = () => {
+      if (activeGameId) {
+        sendMessage({
+          type: "reconnect",
+          payload: {
+            playerId: playerId,
+            gameId: activeGameId,
+          },
+        });
+      }
+    };
+
+    connectSocket(onSocketOpen);
 
     subscribeToMessages((message) => {
       console.log("Received message:", message);
-
       switch (message.type) {
         case "match_found":
         case "game_update":
+          setAppStatus("ready");
           setIsSearching(false);
           setGameState(message.payload);
+
+          if (
+            message.payload.status === "playing" ||
+            message.payload.status.includes("disconnected")
+          ) {
+            // CHANGED: from sessionStorage to localStorage
+            localStorage.setItem("activeGameId", message.payload.id);
+          } else {
+            // CHANGED: from sessionStorage to localStorage
+            localStorage.removeItem("activeGameId");
+          }
           break;
         case "leaderboard_update":
           setLeaderboard(message.payload);
@@ -55,19 +78,7 @@ function App() {
           break;
       }
     });
-  }, [handleViewLeaderboard, setGameState, setPlayerId]);
-
-  useEffect(() => {
-    const currentStatus = gameState?.status ?? null;
-    const previousStatus = previousStatusRef.current;
-    const isFinished = currentStatus && currentStatus !== "playing";
-
-    if (isFinished && currentStatus !== previousStatus) {
-      handleViewLeaderboard();
-    }
-
-    previousStatusRef.current = currentStatus;
-  }, [gameState, handleViewLeaderboard]);
+  }, [setGameState, setPlayerId]);
 
   const handleNameSet = (name) => {
     const finalName = setPlayerName(name);
@@ -80,11 +91,54 @@ function App() {
     const playerName = getPlayerName();
     sendMessage({
       type: "find_match",
-      payload: {
-        playerId: playerId,
-        playerName: playerName,
-      },
+      payload: { playerId, playerName },
     });
+  };
+
+  const handleViewLeaderboard = useCallback(() => {
+    setIsLeaderboardLoading(true);
+    sendMessage({ type: "get_leaderboard" });
+  }, []);
+
+  const renderMainContent = () => {
+    if (appStatus === "reconnecting") {
+      return (
+        <div className="card">
+          <h2>Reconnecting...</h2>
+          <p>Attempting to rejoin your active game.</p>
+        </div>
+      );
+    }
+    if (!playerName) {
+      return (
+        <div className="card">
+          <h2>Jump into the arena</h2>
+          <p>Pick a display name to start.</p>
+          <LoginScreen onNameSet={handleNameSet} />
+        </div>
+      );
+    }
+    if (gameState) {
+      return (
+        <div className="card card--game">
+          <GameBoard />
+          <GameStatus />
+        </div>
+      );
+    }
+    return (
+      <div className="card">
+        <h2>Ready when you are</h2>
+        <p>Matchmaking finds you the next available challenger.</p>
+        <button
+          className="primary-button"
+          onClick={handleFindMatch}
+          disabled={isSearching}
+        >
+          {isSearching ? "Searching..." : "Find Match"}
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -107,35 +161,8 @@ function App() {
           </div>
         )}
       </header>
-
       <div className="app-content">
-        <main className="main-stage">
-          {!playerName ? (
-            <div className="card">
-              <h2>Jump into the arena</h2>
-              <p>Pick a display name and you&apos;re seconds away from your first match.</p>
-              <LoginScreen onNameSet={handleNameSet} />
-            </div>
-          ) : gameState ? (
-            <div className="card card--game">
-              <GameBoard />
-              <GameStatus />
-            </div>
-          ) : (
-            <div className="card">
-              <h2>Ready when you are</h2>
-              <p>Matchmaking finds you the next available challenger.</p>
-              <button
-                className="primary-button"
-                onClick={handleFindMatch}
-                disabled={isSearching}
-              >
-                {isSearching ? "Searching..." : "Find Match"}
-              </button>
-            </div>
-          )}
-        </main>
-
+        <main className="main-stage">{renderMainContent()}</main>
         <aside className="sidebar">
           <Leaderboard
             scores={leaderboard}
