@@ -1,5 +1,8 @@
 let socket;
 let openListeners = [];
+const backendWsUrl =
+  (typeof __APP_BACKEND_WS_URL__ !== "undefined" && __APP_BACKEND_WS_URL__) ||
+  "wss://tic-tac-toe-server-5jbq.onrender.com/ws";
 
 const flushOpenListeners = () => {
   if (openListeners.length === 0) {
@@ -36,7 +39,7 @@ export const connectSocket = (onOpen) => {
     }
   }
 
-  socket = new WebSocket("ws://localhost:8080/ws");
+  socket = new WebSocket(backendWsUrl);
 
   socket.onopen = () => {
     console.log("WebSocket connection established successfully.");
